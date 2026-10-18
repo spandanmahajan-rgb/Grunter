@@ -6,8 +6,8 @@ Grunter does the grunt work of ratio adapts. Pick a master key visual in Adobe I
 
 ## Install
 
-1. Download `Grunter-<version>.zip` from the [Releases](../../releases) page and unzip it.
-2. Drag `Grunter.app` to Applications.
+1. [Download the latest Grunter.dmg](https://github.com/spandanmahajan-rgb/Grunter/releases/latest/download/Grunter.dmg) (all versions are on the [Releases](../../releases) page).
+2. Open it and drag `Grunter.app` to Applications.
 3. The app is not notarized by Apple. The first time, right-click it, choose **Open**, then **Open** again. If macOS still refuses, run `xattr -cr /Applications/Grunter.app` once.
 4. Open your file in Illustrator, then open Grunter. Allow it to control Illustrator when macOS asks.
 

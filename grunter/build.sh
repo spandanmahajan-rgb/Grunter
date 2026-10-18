@@ -2,7 +2,7 @@
 # Builds Grunter.app into grunter/build/. Needs only Apple's Command Line Tools (swiftc).
 #   ./build.sh            build
 #   ./build.sh install    build, then copy to /Applications
-#   ./build.sh zip        build, then make build/Grunter-<version>.zip for a GitHub release
+#   ./build.sh dmg        build, then make build/Grunter.dmg for a GitHub release (a fixed name keeps the /releases/latest/download/ link stable)
 set -euo pipefail
 cd "$(dirname "$0")"
 APP="build/Grunter.app"
@@ -49,6 +49,8 @@ if [ "${1:-}" = "install" ]; then
   rm -rf "/Applications/Adapter.app" "/Applications/Grunter.app" && cp -R "$APP" /Applications/ && echo "Installed to /Applications/Grunter.app"
 fi
 
-if [ "${1:-}" = "zip" ]; then
-  ditto -c -k --keepParent "$APP" "build/Grunter-${VERSION}.zip" && echo "Packed build/Grunter-${VERSION}.zip"
+if [ "${1:-}" = "dmg" ]; then
+  STAGE="build/dmg"; rm -rf "$STAGE" build/Grunter.dmg; mkdir -p "$STAGE"
+  cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
+  hdiutil create -quiet -volname "Grunter" -srcfolder "$STAGE" -format UDZO build/Grunter.dmg && rm -rf "$STAGE" && echo "Packed build/Grunter.dmg"
 fi
