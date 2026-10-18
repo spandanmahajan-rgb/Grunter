@@ -331,7 +331,7 @@
         <button class="button-primary" id="readBtn2">Read master</button>
         <div class="error" id="emptyErr" role="alert"></div>
       </div>
-      <div class="busy" id="busy" role="status" aria-live="polite"><div class="busy-pill"><span class="spinner" aria-hidden="true"></span><span id="busyMsg">Reading the master…</span></div></div>
+      <div class="busy" id="busy" role="status" aria-live="polite"><div class="busy-pill"><span class="spinner" aria-hidden="true"></span><span id="busyMsg">Reading the master…</span><span id="busyTime"></span><button class="button-link" id="busyStop" hidden>Stop waiting</button></div></div>
     </div>
   </section>
 
@@ -382,7 +382,7 @@
 
     <div class="sidebar-foot">
       <button class="button-primary" id="makeBtn" disabled>Make adapts</button>
-      <p>Nothing is saved. Undo with File › Revert in Illustrator.</p>
+      <p>Save your file first. File › Revert undoes a Make, along with any other unsaved edits.</p>
     </div>
   </aside>
 </div>
@@ -424,22 +424,27 @@ async function call(cmd, payload, msg) {
   working = true;
   $("busyMsg").textContent = msg || "Working in Illustrator…";
   $("busy").classList.add("is-on");
+  const t0 = Date.now(), tick = setInterval(() => {   // a stuck Illustrator (a dialog open) must not look like a frozen app
+    const s = Math.round((Date.now() - t0) / 1000);
+    $("busyTime").textContent = s >= 5 ? `${s} s` : ""; $("busyStop").hidden = s < 20;
+  }, 1000);
   try { return await send(cmd, payload); }
   catch (e) { return { ok: false, error: NATIVE ? "Grunter lost touch with Illustrator. Try again." : "The dev server isn't running." }; }
-  finally { working = false; $("busy").classList.remove("is-on"); }
+  finally { clearInterval(tick); $("busyTime").textContent = ""; $("busyStop").hidden = true; working = false; $("busy").classList.remove("is-on"); }
 }
+$("busyStop").addEventListener("click", () => { if (NATIVE) send("cancel"); });
 // Served from the page's own origin (grunter://app) so the script can read its pixels to find the master's colour.
 const previewUrl = (i, t) => (NATIVE ? `grunter://app/preview/${i}.png?${t}` : `/master/${i}.png?${t}`);
 
 // key-value store: settings, per-master anchors/roles, learned roles. Kept by the app (or localStorage in a browser).
-let KV = {};
+let KV = {}, saveWarned = false;
 async function kvLoad() {
   if (NATIVE) { try { const r = await send("loadAll"); KV = (r && r.store) || {}; } catch (e) { KV = {}; } }
   else { try { KV = JSON.parse(localStorage.getItem("grunter:kv")) || {}; } catch (e) { KV = {}; } }
 }
 function kvSet(key, value) {
   KV[key] = value;
-  if (NATIVE) send("save", { key, value }).catch(() => {});
+  if (NATIVE) send("save", { key, value }).then((r) => { if (r && !r.ok && !saveWarned) { saveWarned = true; showError("Grunter could not save your settings. Check free disk space."); } }).catch(() => {});
   else try { localStorage.setItem("grunter:kv", JSON.stringify(KV)); } catch (e) {}
 }
 
@@ -760,11 +765,15 @@ function renderRoles() {
                                : "Your changes are remembered for the next KV.";
   $("forget")?.addEventListener("click", () => { kvSet("memory", {}); renderRoles(); });
 }
+function roleProblems(role, its) {
+  const skipped = role === "panel" && A.split ? its.filter((it) => A.regions[it.region].photo) : [];   // Panel only fits the panel side of a split
+  const bad = its.filter((it) => !skipped.includes(it) && (role === "headline" || role === "panel") && /^(logo|legal|edge)$/.test(guessOf(it)));
+  return { skipped, bad };
+}
 // One place that sets roles, for a single element or a ticked group.
 function setRoles(ids, role) {
   const its = ids.map((id) => A.items.find((x) => String(x.id) === id)).filter(Boolean);
-  const skipped = role === "panel" && A.split ? its.filter((it) => A.regions[it.region].photo) : [];   // Panel only fits the panel side of a split
-  const bad = its.filter((it) => !skipped.includes(it) && (role === "headline" || role === "panel") && /^(logo|legal)$/.test(guessOf(it)));
+  const { skipped, bad } = roleProblems(role, its);
   for (const it of its) {
     if (skipped.includes(it)) continue;
     if (role === "auto") delete roles[it.id]; else roles[it.id] = role;
@@ -1027,17 +1036,18 @@ document.querySelectorAll(".step-toggle").forEach((btn) => btn.addEventListener(
 }));
 $("themeBtn").addEventListener("click", () => setTheme(root.dataset.theme === "light" ? "dark" : "light"));
 
+// Moves { id: value } from one read of a master to the next by what each element is and where it sits.
+function carryRoles(byId, fromItems, toItems) {
+  const byKey = {}, out = {};
+  fromItems.forEach((it) => { if (byId[it.id]) byKey[elemKey(it)] = byId[it.id]; });
+  toItems.forEach((it) => { if (byKey[elemKey(it)]) out[it.id] = byKey[elemKey(it)]; });
+  return out;
+}
 // Roles are kept by element id, and ids shift when the file is edited. Re-read each master just before a Make and carry its roles over by what the element is and where it sits.
 async function resync(m) {
   const res = await call("analyse", { doc: docKey(), artboard: m.A.master.index, roles: {}, follow: m.follow !== false, focal: anchorArg(m.anchor), checks: state.rows.map((r) => ({ w: r.w, h: r.h })) }, "Checking the master…");
   if (!res || !res.ok) return;
-  const carry = (byId) => {
-    const byKey = {}, out = {};
-    m.A.items.forEach((it) => { if (byId[it.id]) byKey[elemKey(it)] = byId[it.id]; });
-    res.items.forEach((it) => { if (byKey[elemKey(it)]) out[it.id] = byKey[elemKey(it)]; });
-    return out;
-  };
-  m.roles = carry(m.roles); m.learned = carry(m.learned); m.A = res;
+  m.roles = carryRoles(m.roles, m.A.items, res.items); m.learned = carryRoles(m.learned, m.A.items, res.items); m.A = res;
 }
 $("makeBtn").addEventListener("click", async () => {
   stash();

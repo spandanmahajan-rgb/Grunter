@@ -3,7 +3,7 @@
 // Run by Grunter.app through osascript with an ADAPT_JOB (see runJob). Not meant to be run by hand.
 //   analyse  reads a master and describes it. Changes nothing in the document.
 //   make     adds one artboard per size next to the master and copies the master's objects onto each.
-//            Never saves. Undo with File > Revert.
+//            Never saves. Undo with File > Revert (it also drops unsaved edits, so save first).
 // Rules, read from how the master is built:
 //   Photo      its clip mask is rebuilt to the new board; the photo is recropped around the anchor.
 //   Cut-outs   photo copies with a small mask (a head in front of the headline) move with the photo.
@@ -23,7 +23,6 @@ var STACK_BELOW = 1.2;      // boards narrower than this (w/h) stack the zones i
 var STACK_FIRST = 0.55;     // share of the height the first (photo) zone gets when stacked
 var PANEL_CROP = 1.2;       // a panel zone is cropped to fill its slot; beyond this crop factor the report asks for a human look
 var PANEL_FIT = 0.9;        // flat panels: content fills at most this share of its slot
-var CROP_BY_MARKER = true;  // true: the anchor steers the crop on every size. false: headline first, photo follows (the earlier layout)
 var HERO_MARGIN = 0.04;    // hero keeps this share of the board's short side clear of each edge
 var CANVAS = 8000;          // Illustrator's canvas is about +-8192pt around the origin; never place boards past this
 var GAP = 400;             // pt between new artboards (room for type that runs past the edge)
@@ -61,7 +60,7 @@ function placeEdge(b, mr, tr, isText) {
     return { s: s, left: left, top: top };
 }
 
-// Marker-first layout (CROP_BY_MARKER): the photo is cropped so the marked point stays where it sits in the master,
+// Layout: the photo is cropped so the marked point stays where it sits in the master,
 // the hero then keeps its master position relative to that point and grows with the photo as far as the board allows.
 // Moving the marker therefore moves the crop on every size, not only where the photo has to be enlarged.
 function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R) {
@@ -97,46 +96,7 @@ function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R) {
              zoom: s / base, drift: Math.sqrt((fx - tx) * (fx - tx) + (fy - ty) * (fy - ty)) };
 }
 
-function layout(P, V, F, edges, mr, tr, follow, R) {
-    return CROP_BY_MARKER ? layoutMarkerFirst(P, V, F, edges, mr, tr, follow !== false, R) : layoutHeroFirst(P, V, F, edges, mr, tr);
-}
-
 function overlaps(a, b) { return a[0] < b[2] && b[0] < a[2] && a[3] < b[1] && b[3] < a[1]; }
-
-// Hero first, photo follows (the photo is cropped around the composition, not the reverse).
-//   P     main photo content bounds (unclipped)      V  hero visual bounds (real glyph extents)
-//   F     focal point (e.g. the head under the ring)  edges  new bounds of logo/legal on this board
-// Hero: scaled by the board's short side (keeps its share of the board, as in the master),
-//       its centre at the master's relative position, kept inside the board margin and shrunk
-//       until it clears the edge items.
-// Photo: same scale as the hero, zoomed only if needed to fill the board, focal point under
-//        the hero's focal point, slid only if needed to keep the board covered.
-// Master point p maps to: hero [hx + sh*p.x, hy + sh*p.y],  photo [ox + s*p.x, oy + s*p.y].
-function layoutHeroFirst(P, V, F, edges, mr, tr) {
-    var W = mr[2] - mr[0], H = mr[1] - mr[3], w = tr[2] - tr[0], h = tr[1] - tr[3];
-    var m = HERO_MARGIN * Math.min(w, h);
-    var vw = V[2] - V[0], vh = V[1] - V[3];
-    var cx = tr[0] + ((V[0] + V[2]) / 2 - mr[0]) / W * w, cy = tr[1] - (mr[1] - (V[1] + V[3]) / 2) / H * h;
-    var sh = Math.min(Math.min(w, h) / Math.min(W, H), (w - 2 * m) / vw, (h - 2 * m) / vh), hx, hy, nv, i, hit;
-    for (var tries = 0; tries < 20; tries++) {
-        // centre at the relative position, then clamp inside the margin
-        var l = Math.max(tr[0] + m, Math.min(cx - sh * vw / 2, tr[2] - m - sh * vw));
-        var t = Math.min(tr[1] - m, Math.max(cy + sh * vh / 2, tr[3] + m + sh * vh));
-        hx = l - sh * V[0]; hy = t - sh * V[1];
-        nv = [l, t, l + sh * vw, t - sh * vh];
-        for (hit = false, i = 0; i < edges.length; i++) if (overlaps(nv, edges[i])) hit = true;
-        if (!hit) break;
-        sh *= 0.95;
-    }
-    var pw = P[2] - P[0], ph = P[1] - P[3];
-    var s = Math.max(sh, w / pw, h / ph);
-    var fx = hx + sh * F[0], fy = hy + sh * F[1];   // where the hero's focal point landed
-    var left = Math.max(Math.min(fx + s * (P[0] - F[0]), tr[0]), tr[2] - s * pw);
-    var top = Math.min(Math.max(fy + s * (P[1] - F[1]), tr[1]), tr[3] + s * ph);
-    var ox = left - s * P[0], oy = top - s * P[1];
-    return { sh: sh, hx: hx, hy: hy, s: s, ox: ox, oy: oy, hero: nv, clash: hit,
-             zoom: s / sh, drift: Math.sqrt(Math.pow(ox + s * F[0] - fx, 2) + Math.pow(oy + s * F[1] - fy, 2)) };
-}
 
 // Focal point = centre of an object named "focal", else of the largest non-text hero object.
 function pickFocal(items, mr) {   // items: [{b, kind, isText, name}] -> { p: [x, y], main: bounds|null }
@@ -189,11 +149,16 @@ function maskBounds(item) {
 // Everything else keeps its own bounds, so a read adds no temporary copies to the file.
 function visualBounds(item) {
     if (item.typename !== "TextFrame" || item.kind !== TextType.PATHTEXT) return item.visibleBounds;
-    var copy = null, outlined = null;
+    var copy = null, outlined = null, key = null, cache = $.global.gruntOutlineCache || ($.global.gruntOutlineCache = {}), vb;
+    // shortcut: the key does not see a font change that leaves path, text and size alone; restart Illustrator to clear the cache
+    try { if (item.uuid) key = item.uuid + "|" + item.visibleBounds.join(",") + "|" + item.contents + "|" + item.textRange.characterAttributes.size; } catch (e0) { key = null; }
+    if (key && cache[key]) return cache[key];
     try {
         copy = item.duplicate();
         outlined = copy.createOutline();
-        return outlined.visibleBounds;
+        vb = outlined.visibleBounds;
+        if (key) cache[key] = vb;
+        return vb;
     } catch (e) {
         return item.visibleBounds;
     } finally {
@@ -454,7 +419,7 @@ function analyseMaster(doc, mi, focalAt, roles, follow) {
         }
         return out;
     }
-    function layoutFor(rg, rtr) { return layout(rg.mainBg ? rg.mainBg.P : rg.mr, rg.V, rg.focal.p, edgesOn(rg, rtr), rg.mr, rtr, follow !== false, rg.focal.r); }
+    function layoutFor(rg, rtr) { return layoutMarkerFirst(rg.mainBg ? rg.mainBg.P : rg.mr, rg.V, rg.focal.p, edgesOn(rg, rtr), rg.mr, rtr, follow !== false, rg.focal.r); }
     function needsPhoto(w, h) {
         var tr0 = [0, h, w, 0], rs = targetRects(regions, tr0, split), q = 0;
         while (q < regions.length && regions[q] !== mainRegion) q++;
@@ -488,7 +453,7 @@ function makeAdapts(M, sizes) {
     }
 
     // new artboards go in rows below everything that exists
-    var minBottom = mr[3], maxRight = mr[2], FULL = "the canvas is full of earlier adapts. Use File > Revert or delete old boards, then Make again.";
+    var minBottom = mr[3], maxRight = mr[2], FULL = "the canvas is full of earlier adapts. Save, then use File > Revert (it drops unsaved edits), or delete old boards, then Make again.";
     for (k = 0; k < doc.artboards.length; k++) {
         minBottom = Math.min(minBottom, doc.artboards[k].artboardRect[3]);
         maxRight = Math.max(maxRight, doc.artboards[k].artboardRect[2]);

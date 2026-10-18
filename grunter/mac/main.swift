@@ -19,6 +19,8 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
     let storeFile: URL
     let roleNames: Set<String> = ["auto", "photo", "cutout", "headline", "panel", "logo", "legal", "decor", "focal"]
     private var store: [String: Any] = [:]
+    private var running: Process?   // the osascript waiting on Illustrator, so Stop waiting can end it
+    private var cancelled = false
     private let jobs = DispatchQueue(label: "grunter.jobs", qos: .userInitiated)   // Illustrator takes one script at a time
 
     override init() {
@@ -50,10 +52,14 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
         case "loadAll":
             replyHandler(["ok": true, "store": store], nil)
         case "save":
+            var saved = false
             if let key = p["key"] as? String {
                 store[key] = p["value"] ?? NSNull()
-                if let data = try? JSONSerialization.data(withJSONObject: store) { try? data.write(to: storeFile, options: .atomic) }
+                if let data = try? JSONSerialization.data(withJSONObject: store), (try? data.write(to: storeFile, options: .atomic)) != nil { saved = true }
             }
+            replyHandler(["ok": saved], nil)
+        case "cancel":
+            cancelled = true; running?.terminate()
             replyHandler(["ok": true], nil)
         case "pick":
             pick(prompt: p["prompt"] as? String ?? "Choose a photo") { path in
@@ -166,17 +172,26 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             proc.arguments = ["-e", "tell application \"Adobe Illustrator\" to do javascript (POSIX file \"\(runner.path)\")"]
-            let err = Pipe(); proc.standardError = err; proc.standardOutput = Pipe()
+            // both streams go to a file: an unread pipe blocks osascript once it holds 64 KB
+            let logURL = self.work.appendingPathComponent("osa_\(UUID().uuidString).log")
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+            let logHandle = try? FileHandle(forWritingTo: logURL)
+            proc.standardError = logHandle; proc.standardOutput = logHandle
             var result: [String: Any]
+            self.cancelled = false
             do {
                 try proc.run()
+                self.running = proc
                 let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: killer)   // a 400 MB master with many sizes can take many minutes
                 proc.waitUntilExit()
                 killer.cancel()
-                let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                self.running = nil
+                let msg = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
                 if let data = try? Data(contentsOf: out), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     result = obj
+                } else if self.cancelled {
+                    result = ["ok": false, "error": "Stopped waiting. Illustrator may still be working or showing a dialog: check it before trying again."]
                 } else if msg.contains("-1743") {
                     result = ["ok": false, "error": "macOS blocked Grunter from controlling Illustrator. Allow it in System Settings › Privacy & Security › Automation."]
                 } else if msg.contains("-600") || msg.contains("-1728") {
@@ -187,6 +202,8 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
             } catch {
                 result = ["ok": false, "error": "Could not reach Illustrator."]
             }
+            try? logHandle?.close()
+            try? FileManager.default.removeItem(at: logURL)
             try? FileManager.default.removeItem(at: out)
             try? FileManager.default.removeItem(at: runner)
             DispatchQueue.main.async { done(result) }
@@ -245,7 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         config.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: "grunter")
         config.setURLSchemeHandler(bridge, forURLScheme: "grunter")
         let web = WKWebView(frame: .zero, configuration: config)
-        if #available(macOS 13.3, *) { web.isInspectable = true }
         web.load(URLRequest(url: URL(string: "grunter://app/index.html")!))
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),

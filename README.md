@@ -11,7 +11,7 @@ Grunter does the grunt work of ratio adapts. Pick a master key visual in Adobe I
 3. The app is not notarized by Apple. The first time, right-click it, choose **Open**, then **Open** again. If macOS still refuses, run `xattr -cr /Applications/Grunter.app` once.
 4. Open your file in Illustrator, then open Grunter. Allow it to control Illustrator when macOS asks.
 
-Needs macOS 12 or later and Adobe Illustrator. Grunter adds artboards to the open file; **File > Revert** undoes a Make.
+Needs macOS 12 or later and Adobe Illustrator. Grunter adds artboards to the open file; Save your file first: **File > Revert** undoes a Make, but also drops any other unsaved edits.
 
 ## Build from source
 
