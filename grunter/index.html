@@ -426,13 +426,12 @@ async function call(cmd, payload, msg) {
   $("busy").classList.add("is-on");
   const t0 = Date.now(), tick = setInterval(() => {   // a stuck Illustrator (a dialog open) must not look like a frozen app
     const s = Math.round((Date.now() - t0) / 1000);
-    $("busyTime").textContent = s >= 5 ? `${s} s` : ""; $("busyStop").hidden = s < 20;
+    $("busyTime").textContent = s >= 5 ? `${s} s` : ""; $("busyStop").hidden = s < 120;   // big files take minutes; stopping early invites a second Make on top of the first
   }, 1000);
   try { return await send(cmd, payload); }
   catch (e) { return { ok: false, error: NATIVE ? "Grunter lost touch with Illustrator. Try again." : "The dev server isn't running." }; }
   finally { clearInterval(tick); $("busyTime").textContent = ""; $("busyStop").hidden = true; working = false; $("busy").classList.remove("is-on"); }
 }
-$("busyStop").addEventListener("click", () => { if (NATIVE) send("cancel"); });
 // Served from the page's own origin (grunter://app) so the script can read its pixels to find the master's colour.
 const previewUrl = (i, t) => (NATIVE ? `grunter://app/preview/${i}.png?${t}` : `/master/${i}.png?${t}`);
 
@@ -1011,6 +1010,7 @@ $("addBtn").addEventListener("click", () => {
 });
 $("addSize").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addBtn").click(); });
 $("addSize").addEventListener("input", () => { $("addSize").removeAttribute("aria-invalid"); $("sizeErr").hidden = true; });
+$("busyStop").addEventListener("click", () => { if (NATIVE) send("cancel"); });
 $("readBtn").addEventListener("click", () => analyse({ fresh: true, reset: true }));
 $("readBtn2").addEventListener("click", () => analyse({ fresh: true, reset: true }));
 $("anchorR").addEventListener("input", () => {   // % of the master's short side; the anchor gets placed at its current spot if it was not yet
@@ -1044,15 +1044,23 @@ function carryRoles(byId, fromItems, toItems) {
   return out;
 }
 // Roles are kept by element id, and ids shift when the file is edited. Re-read each master just before a Make and carry its roles over by what the element is and where it sits.
+// Returns how many roles were lost (their element moved or was deleted), or -1 when the master could not be read.
 async function resync(m) {
+  if (!Object.keys(m.roles).length) return 0;   // nothing to carry over
   const res = await call("analyse", { doc: docKey(), artboard: m.A.master.index, roles: {}, follow: m.follow !== false, focal: anchorArg(m.anchor), checks: state.rows.map((r) => ({ w: r.w, h: r.h })) }, "Checking the master…");
-  if (!res || !res.ok) return;
+  if (!res || !res.ok) return -1;
+  const had = Object.keys(m.roles).length;
   m.roles = carryRoles(m.roles, m.A.items, res.items); m.learned = carryRoles(m.learned, m.A.items, res.items); m.A = res;
+  res.items.forEach((it) => { if (m.roles[it.id]) it.tag = m.roles[it.id]; });   // read without roles: show the ones the Make will use
+  return had - Object.keys(m.roles).length;
 }
 $("makeBtn").addEventListener("click", async () => {
   stash();
-  for (const m of masters) await resync(m);
-  ({ A, roles, learned } = masters[cur]); render();
+  let lost = 0, unread = false;
+  for (const m of masters) { const n = await resync(m); if (n < 0) unread = true; else lost += n; }
+  ({ A, roles, learned } = masters[cur]); saveMaster(); render();
+  if (unread) return showError("Couldn't read the master again before the Make. Check Illustrator, then try again.");
+  if (lost) return notify(`<h3><i></i>Check the roles</h3><p>${lost} role${lost > 1 ? "s" : ""} no longer match${lost > 1 ? "" : "es"} an element, because it moved or was deleted. Check Roles, then Make again.</p>`, 1, "error");
   const sizes = state.rows.filter((r) => r.on).map((r) => ({
     w: r.w, h: r.h, plate: r.plate || state.groupPlate[groupOf(r.w, r.h)] || null,
     master: masters.some((m) => m.A.master.index === r.master) ? r.master : undefined,

@@ -6,12 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 APP="build/Grunter.app"
-VERSION="0.1.1"
+VERSION="0.1.2"
 
 [ -f tests/run.js ] && node tests/run.js   # engine geometry checks (kept out of the public repo); stop here if they fail
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/web"
 cp Grunter.icns "$APP/Contents/Resources/Grunter.icns"
+cp FONT-LICENSE.txt "$APP/Contents/Resources/FONT-LICENSE.txt"   # the page embeds Host Grotesk (SIL OFL): its license travels with it
 
 swiftc -O -target arm64-apple-macos12.0 -framework Cocoa -framework WebKit mac/main.swift -o build/Grunter-arm64
 swiftc -O -target x86_64-apple-macos12.0 -framework Cocoa -framework WebKit mac/main.swift -o build/Grunter-x86_64
@@ -51,6 +52,6 @@ fi
 
 if [ "${1:-}" = "dmg" ]; then
   STAGE="build/dmg"; rm -rf "$STAGE" build/Grunter.dmg; mkdir -p "$STAGE"
-  cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
+  cp -R "$APP" "$STAGE/" && cp FONT-LICENSE.txt "$STAGE/" && ln -s /Applications "$STAGE/Applications"
   hdiutil create -quiet -volname "Grunter" -srcfolder "$STAGE" -format UDZO build/Grunter.dmg && rm -rf "$STAGE" && echo "Packed build/Grunter.dmg"
 fi

@@ -21,6 +21,7 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
     private var store: [String: Any] = [:]
     private var running: Process?   // the osascript waiting on Illustrator, so Stop waiting can end it
     private var cancelled = false
+    private let lock = NSLock()      // running and cancelled are set by the job queue and by Stop waiting on the main thread
     private let jobs = DispatchQueue(label: "grunter.jobs", qos: .userInitiated)   // Illustrator takes one script at a time
 
     override init() {
@@ -59,7 +60,7 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
             }
             replyHandler(["ok": saved], nil)
         case "cancel":
-            cancelled = true; running?.terminate()
+            lock.lock(); cancelled = true; running?.terminate(); lock.unlock()
             replyHandler(["ok": true], nil)
         case "pick":
             pick(prompt: p["prompt"] as? String ?? "Choose a photo") { path in
@@ -172,25 +173,25 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply, WKURLSchemeHandle
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             proc.arguments = ["-e", "tell application \"Adobe Illustrator\" to do javascript (POSIX file \"\(runner.path)\")"]
-            // both streams go to a file: an unread pipe blocks osascript once it holds 64 KB
+            // errors go to a file: an unread pipe blocks osascript once it holds 64 KB
             let logURL = self.work.appendingPathComponent("osa_\(UUID().uuidString).log")
             FileManager.default.createFile(atPath: logURL.path, contents: nil)
             let logHandle = try? FileHandle(forWritingTo: logURL)
-            proc.standardError = logHandle; proc.standardOutput = logHandle
+            proc.standardError = logHandle; proc.standardOutput = FileHandle.nullDevice   // only errors are read
             var result: [String: Any]
-            self.cancelled = false
+            self.lock.lock(); self.cancelled = false; self.lock.unlock()
             do {
                 try proc.run()
-                self.running = proc
+                self.lock.lock(); self.running = proc; self.lock.unlock()
                 let killer = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1800, execute: killer)   // a 400 MB master with many sizes can take many minutes
                 proc.waitUntilExit()
                 killer.cancel()
-                self.running = nil
+                self.lock.lock(); self.running = nil; let stopped = self.cancelled; self.lock.unlock()
                 let msg = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
                 if let data = try? Data(contentsOf: out), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     result = obj
-                } else if self.cancelled {
+                } else if stopped {
                     result = ["ok": false, "error": "Stopped waiting. Illustrator may still be working or showing a dialog: check it before trying again."]
                 } else if msg.contains("-1743") {
                     result = ["ok": false, "error": "macOS blocked Grunter from controlling Illustrator. Allow it in System Settings › Privacy & Security › Automation."]
