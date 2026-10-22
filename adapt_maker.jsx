@@ -16,6 +16,9 @@
 
 var EDGE_MAX_AREA = 0.06;   // edge items are smaller than this share of the master area
 var EDGE_NEAR = 0.12;       // ...and within this share of the board from an edge (0.2 caught headlines)
+var EDGE_MAX_SPAN = 0.85;   // ...and no wider or taller than this share of the board: a row across the board is a headline, not a logo
+var SCRIM_SPAN = 0.9;       // a band across the board (a gradient or scrim) spans this much of the width...
+var SCRIM_AREA = 0.25;      // ...and covers this share of the master: it rides with the photo, it is not part of the headline
 var BG_COVER = 0.9;         // backgrounds cover at least this share of both sides
 var ZOOM_LIMIT = 1.1;       // photo may zoom this much past the headline before a new photo is advised
 var ZONE_MIN = 0.2;         // a split zone is at least this share of the master width
@@ -23,6 +26,8 @@ var STACK_BELOW = 1.2;      // boards narrower than this (w/h) stack the zones i
 var STACK_FIRST = 0.55;     // share of the height the first (photo) zone gets when stacked
 var PANEL_CROP = 1.2;       // a panel zone is cropped to fill its slot; beyond this crop factor the report asks for a human look
 var PANEL_FIT = 0.9;        // flat panels: content fills at most this share of its slot
+var HERO_SHRINK_NOTE = 0.85; // a headline shrunk below this share of its master size gets a note after the Make
+var CUT_COVER_NOTE = 0.04; // a cut-out covering this much more of the headline's letters than in the master gets a note
 var HERO_MARGIN = 0.04;    // hero keeps this share of the board's short side clear of each edge
 var CANVAS = 8000;          // Illustrator's canvas is about +-8192pt around the origin; never place boards past this
 var GAP = 400;             // pt between new artboards (room for type that runs past the edge)
@@ -36,7 +41,8 @@ function classify(b, mr, isText) {
     if (w >= BG_COVER * W && h >= BG_COVER * H) return "background";
     var mL = b[0] - mr[0], mR = mr[2] - b[2], mT = mr[1] - b[1], mB = b[3] - mr[3];
     var near = Math.min(mL, mR) <= EDGE_NEAR * W || Math.min(mT, mB) <= EDGE_NEAR * H;
-    if (w * h <= EDGE_MAX_AREA * W * H && near) return "edge";
+    if (w * h <= EDGE_MAX_AREA * W * H && near && w <= EDGE_MAX_SPAN * W && h <= EDGE_MAX_SPAN * H) return "edge";
+    if (!isText && w >= SCRIM_SPAN * W && h < BG_COVER * H && w * h >= SCRIM_AREA * W * H) return "decor";   // a big headline across the board is not a scrim
     return "hero";
 }
 
@@ -63,7 +69,9 @@ function placeEdge(b, mr, tr, isText) {
 // Layout: the photo is cropped so the marked point stays where it sits in the master,
 // the hero then keeps its master position relative to that point and grows with the photo as far as the board allows.
 // Moving the marker therefore moves the crop on every size, not only where the photo has to be enlarged.
-function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R) {
+// parts (optional): the headline's letters as rects in master coordinates. The clash check tests them instead of the one box around V,
+// so a ring or arc does not count as touching a logo that only sits in the empty corner of its box.
+function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R, parts) {
     var W = mr[2] - mr[0], H = mr[1] - mr[3], w = tr[2] - tr[0], h = tr[1] - tr[3];
     var m = HERO_MARGIN * Math.min(w, h), base = Math.min(w, h) / Math.min(W, H);
     var pw = P[2] - P[0], ph = P[1] - P[3];
@@ -79,7 +87,8 @@ function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R) {
     var vw = V[2] - V[0], vh = V[1] - V[3], vcx = (V[0] + V[2]) / 2, vcy = (V[1] + V[3]) / 2;
     // follow: the hero keeps its master offset from the marker and grows with the photo.
     // not follow: the hero keeps its master place on the board (as in hero-first); the marker only steers the photo crop.
-    var sh = Math.min(follow ? s : base, (w - 2 * m) / vw, (h - 2 * m) / vh), hx, hy, nv, i, hit;
+    var want = follow ? s : base, fit = Math.min((w - 2 * m) / vw, (h - 2 * m) / vh);   // the size it would have, and the most the board allows
+    var sh = Math.min(want, fit), hx, hy, nv, i, hit, shrunk = 0;
     var bcx = tr[0] + (vcx - mr[0]) / W * w, bcy = tr[1] - (mr[1] - vcy) / H * h;
     for (var tries = 0; tries < 20; tries++) {
         var cx = follow ? fx + sh * (vcx - F[0]) : bcx, cy = follow ? fy + sh * (vcy - F[1]) : bcy;
@@ -87,14 +96,64 @@ function layoutMarkerFirst(P, V, F, edges, mr, tr, follow, R) {
         var t = Math.min(tr[1] - m, Math.max(cy + sh * vh / 2, tr[3] + m + sh * vh));
         hx = l - sh * V[0]; hy = t - sh * V[1];
         nv = [l, t, l + sh * vw, t - sh * vh];
-        for (hit = false, i = 0; i < edges.length; i++) if (overlaps(nv, edges[i])) hit = true;
+        hit = clashes(nv, edges, parts, V, sh, l, t);
         if (!hit) break;
-        sh *= 0.95;
+        sh *= 0.95; shrunk++;
     }
     var cut = rr > 0 && (fx - rr < tr[0] - 0.5 || fx + rr > tr[2] + 0.5 || fy - rr < tr[3] - 0.5 || fy + rr > tr[1] + 0.5);
-    return { sh: sh, hx: hx, hy: hy, s: s, ox: ox, oy: oy, hero: nv, clash: hit, cut: cut,
+    return { sh: sh, want: want, fit: fit, shrunk: shrunk, hx: hx, hy: hy, s: s, ox: ox, oy: oy, hero: nv, clash: hit, cut: cut,
              zoom: s / base, drift: Math.sqrt((fx - tx) * (fx - tx) + (fy - ty) * (fy - ty)) };
 }
+
+// Does the headline, placed with its box top-left at (l, t) and scaled by sh, touch any edge item?
+function clashes(nv, edges, parts, V, sh, l, t) {
+    var i, j, q;
+    for (i = 0; i < edges.length; i++) {
+        if (!overlaps(nv, edges[i])) continue;                       // the box is clear, so every letter is
+        if (!parts || !parts.length) return true;
+        for (j = 0; j < parts.length; j++) {
+            q = parts[j];
+            if (overlaps([l + sh * (q[0] - V[0]), t + sh * (q[1] - V[1]), l + sh * (q[2] - V[0]), t + sh * (q[3] - V[1])], edges[i])) return true;
+        }
+    }
+    return false;
+}
+
+// A band across the master (a scrim or gradient) on a new board: it rides with the photo, but spans the whole board width
+// and stays flush with any board edge it touched in the master, so a crop never leaves a bare strip beside or under it.
+// s, ox, oy: the photo's scale and origin on this board. Returns the band's target rect [left, top, right, bottom].
+function placeBand(b, mr, tr, s, ox, oy) {
+    var H = mr[1] - mr[3], tol = 0.005 * H, r = [ox + s * b[0], oy + s * b[1], ox + s * b[2], oy + s * b[3]];
+    r[0] = tr[0]; r[2] = tr[2];
+    if (b[3] - mr[3] <= tol) r[3] = Math.min(r[3], tr[3]);     // touched the master's bottom: still reaches the board's bottom
+    if (mr[1] - b[1] <= tol) r[1] = Math.max(r[1], tr[1]);     // ...or its top
+    return r;
+}
+
+// Why the headline is smaller than it would be on this board, in plain words ("" when it is not).
+function heroReason(Lt) {
+    if (Lt.sh >= Lt.want * 0.999) return "";
+    var why = [];
+    if (Lt.fit < Lt.want * 0.999) why.push("to fit the board");
+    if (Lt.shrunk) why.push("to clear the logo or legal text");
+    return why.join(" and ");
+}
+
+// Share of the headline's letters a cut-out covers on this board (now) and in the master (was).
+// k: the cut-out's shown area, V and parts: the headline and its letters, all in master coordinates. Lt: layoutMarkerFirst's result.
+// The photo grows with the board while the headline may not, so on a tall board a head can land on the letters.
+function cutoutCover(k, V, parts, Lt) {
+    var r = [Lt.ox + Lt.s * k[0], Lt.oy + Lt.s * k[1], Lt.ox + Lt.s * k[2], Lt.oy + Lt.s * k[3]], l = Lt.hero[0], t = Lt.hero[1];
+    var now = 0, was = 0, all = 0, i, q;
+    for (i = 0; i < parts.length; i++) {
+        q = parts[i];
+        now += overlapArea(r, [l + Lt.sh * (q[0] - V[0]), t + Lt.sh * (q[1] - V[1]), l + Lt.sh * (q[2] - V[0]), t + Lt.sh * (q[3] - V[1])]);
+        was += overlapArea(k, q); all += area(q);
+    }
+    return all > 0 ? { now: now / (Lt.sh * Lt.sh * all), was: was / all } : { now: 0, was: 0 };
+}
+
+function overlapArea(a, b) { return Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[1], b[1]) - Math.max(a[3], b[3])); }
 
 function overlaps(a, b) { return a[0] < b[2] && b[0] < a[2] && a[3] < b[1] && b[3] < a[1]; }
 
@@ -127,16 +186,43 @@ function isClipPath(it) {
 }
 
 // Bounds of what is inside a clip mask (the whole photo), or the item itself.
+// A clipped group inside it counts only as far as its own mask shows: a photo nested in a smaller mask is that smaller area.
+// When the group holds an image, only the image counts: a gradient or tint laid over it may reach past the pixels,
+// and measuring it would leave bare strips beside the photo on a new board.
 function contentBounds(item) {
-    if (item.typename !== "GroupItem" || !item.clipped) return item.visibleBounds;
-    var u = null, i, b, c;
+    var u = null, img = null, i, b, c, nested = false;
+    if (item.typename !== "GroupItem") return item.visibleBounds;
+    if (!item.clipped) {   // a plain group: only look inside when something in it is clipped (visibleBounds ignores masks)
+        for (i = 0; i < item.pageItems.length; i++) if (item.pageItems[i].typename === "GroupItem" && item.pageItems[i].clipped) nested = true;
+        if (!nested) return item.visibleBounds;
+    }
     for (i = 0; i < item.pageItems.length; i++) {
         c = item.pageItems[i];
         if (isClipPath(c)) continue;
-        b = c.visibleBounds;
-        u = u ? [Math.min(u[0], b[0]), Math.max(u[1], b[1]), Math.max(u[2], b[2]), Math.min(u[3], b[3])] : b;
+        b = shownBounds(c);
+        u = union(u, b);
+        if (holds(c, isImage, 0)) img = union(img, b);
     }
-    return u || item.visibleBounds;
+    return img || u || item.visibleBounds;
+}
+
+function union(u, b) { return u ? [Math.min(u[0], b[0]), Math.max(u[1], b[1]), Math.max(u[2], b[2]), Math.min(u[3], b[3])] : b; }
+
+// Is it, or anything grouped inside it (4 levels deep), what test asks for?
+function holds(it, test, depth) {
+    try { if (test(it)) return true; } catch (e) { return false; }
+    if (it.typename !== "GroupItem" || depth > 4) return false;
+    for (var i = 0; i < it.pageItems.length; i++) if (holds(it.pageItems[i], test, depth + 1)) return true;
+    return false;
+}
+function isImage(it) { return it.typename === "RasterItem" || it.typename === "PlacedItem"; }
+function isTextItem(it) { return it.typename === "TextFrame"; }
+function isPathText(it) { return it.typename === "TextFrame" && it.kind === TextType.PATHTEXT; }
+
+// What a child of a photo group shows: a clipped group is cut to its own mask.
+function shownBounds(c) {
+    var b = contentBounds(c), m = c.typename === "GroupItem" && c.clipped ? maskBounds(c) : null;
+    return m ? [Math.max(b[0], m[0]), Math.min(b[1], m[1]), Math.min(b[2], m[2]), Math.max(b[3], m[3])] : b;
 }
 
 function maskBounds(item) {
@@ -145,25 +231,48 @@ function maskBounds(item) {
     return null;
 }
 
-// Real extents of a headline. Only text on a path needs outlining: it reports its whole path, not its letters.
-// Everything else keeps its own bounds, so a read adds no temporary copies to the file.
-function visualBounds(item) {
-    if (item.typename !== "TextFrame" || item.kind !== TextType.PATHTEXT) return item.visibleBounds;
-    var copy = null, outlined = null, key = null, cache = $.global.gruntOutlineCache || ($.global.gruntOutlineCache = {}), vb;
+// Real extents of a headline: { b: bounds of all of it, parts: bounds of each letter }. Only text on a path needs outlining:
+// it reports its whole path, not its letters. Everything else is one part, so a read adds no temporary copies to the file.
+var MAX_PARTS = 300;   // beyond this the letter boxes cost more than they save: fall back to the one box
+function leafBounds(it, out, depth) {
+    var i;
+    if (it.typename === "GroupItem" && depth < 4) { for (i = 0; i < it.pageItems.length; i++) leafBounds(it.pageItems[i], out, depth + 1); }
+    else out.push(it.visibleBounds);
+}
+function visualShape(item, depth) {
+    var plain = function () { var b = item.visibleBounds; return { b: b, parts: [b] }; };
+    if (item.typename === "GroupItem" && !item.clipped && (depth || 0) < 4) return groupShape(item, depth || 0);   // grouped path text: measure what is inside
+    if (item.typename !== "TextFrame" || item.kind !== TextType.PATHTEXT) return plain();
+    var copy = null, outlined = null, key = null, cache = $.global.gruntOutlineCache || ($.global.gruntOutlineCache = {}), sh, parts;
     // shortcut: the key does not see a font change that leaves path, text and size alone; restart Illustrator to clear the cache
-    try { if (item.uuid) key = item.uuid + "|" + item.visibleBounds.join(",") + "|" + item.contents + "|" + item.textRange.characterAttributes.size; } catch (e0) { key = null; }
+    try { if (item.uuid) key = "shape|" + item.uuid + "|" + item.visibleBounds.join(",") + "|" + item.contents + "|" + item.textRange.characterAttributes.size; } catch (e0) { key = null; }
     if (key && cache[key]) return cache[key];
     try {
         copy = item.duplicate();
         outlined = copy.createOutline();
-        vb = outlined.visibleBounds;
-        if (key) cache[key] = vb;
-        return vb;
+        parts = [];
+        leafBounds(outlined, parts, 0);
+        sh = { b: outlined.visibleBounds, parts: parts.length && parts.length <= MAX_PARTS ? parts : [outlined.visibleBounds] };
+        if (key) cache[key] = sh;
+        return sh;
     } catch (e) {
-        return item.visibleBounds;
+        return plain();
     } finally {
         try { (outlined || copy).remove(); } catch (e2) {}   // never leave the temporary copy in the file
     }
+}
+
+// A group's real extent: its children's, so path text inside a group is outlined too. Only differs from the group's own
+// bounds when something inside is path text; otherwise the group stays one part.
+function groupShape(g, depth) {
+    var b = null, parts = [], i, sh, any = false;
+    for (i = 0; i < g.pageItems.length; i++) if (holds(g.pageItems[i], isPathText, depth + 1)) any = true;
+    if (!any) { b = g.visibleBounds; return { b: b, parts: [b] }; }
+    for (i = 0; i < g.pageItems.length; i++) {
+        sh = visualShape(g.pageItems[i], depth + 1);
+        b = union(b, sh.b); parts = parts.concat(sh.parts);
+    }
+    return { b: b, parts: parts.length <= MAX_PARTS ? parts : [b] };
 }
 
 function r(a) { var o = [], i; for (i = 0; i < a.length; i++) o.push(Math.round(a[i])); return "[" + o.join(",") + "]"; }
@@ -179,6 +288,10 @@ function moveTo(dup, s, left, top, byContent) {
 // Turn a copied background into "photo inside a mask the exact size of board tr".
 function makePhoto(dup, pl, tr, label) {
     // fresh group: editing an existing clip group's mask in place is unreliable in Illustrator
+    // scale and place first, while the copy is built like the original, so contentBounds sees what the layout saw
+    if (Math.abs(pl.s - 1) > 1e-4) dup.resize(pl.s * 100, pl.s * 100, true, true, true, true, pl.s * 100, Transformation.CENTER);
+    var nb = contentBounds(dup);
+    dup.translate(pl.left - nb[0], pl.top - nb[1]);
     var g = dup.parent.groupItems.add(), i, c;
     g.move(dup, ElementPlacement.PLACEBEFORE);
     if (dup.typename === "GroupItem" && dup.clipped) {
@@ -190,9 +303,6 @@ function makePhoto(dup, pl, tr, label) {
     } else {
         dup.move(g, ElementPlacement.PLACEATEND);
     }
-    if (Math.abs(pl.s - 1) > 1e-4) g.resize(pl.s * 100, pl.s * 100, true, true, true, true, pl.s * 100, Transformation.CENTER);
-    var nb = g.visibleBounds;
-    g.translate(pl.left - nb[0], pl.top - nb[1]);
     // created at document level, then moved in: group.pathItems.rectangle does not land inside the group
     var mask = app.activeDocument.pathItems.rectangle(tr[1], tr[0], tr[2] - tr[0], tr[1] - tr[3]);
     mask.move(g, ElementPlacement.PLACEATBEGINNING);
@@ -379,13 +489,14 @@ function analyseMaster(doc, mi, focalAt, roles, follow) {
         for (k = 0; k < rg.items.length; k++) {
             it = rg.items[k];
             it.keepSize = it.tag === "legal" || (!it.tag && it.isText);
-            it.kind = rg.zoneBg === it ? "background" : (KIND_OF[it.tag] || classify(it.b, rmr, it.isText));
+            it.kind = rg.zoneBg === it ? "background" : (KIND_OF[it.tag] || classify(it.b, rmr, holds(it.item, isTextItem, 0)));
             items.push(it);
             if (it.kind !== "background") continue;
             it.P = contentBounds(it.item);
             // a mask much smaller than the board is a cut-out (e.g. head/hand popping in front of the
             // headline): keep it. A board-size (or zone-size) mask is the background: rebuilt per board.
             var mb = maskBounds(it.item);
+            it.shown = shownBounds(it.item);
             it.cutout = rg.zoneBg !== it && (it.tag === "cutout" ||
                 (it.tag !== "photo" && !!mb && ((mb[2] - mb[0]) < BG_COVER * rW || (mb[1] - mb[3]) < BG_COVER * rH)));
             if (!it.cutout && (!rg.mainBg || area(it.P) > area(rg.mainBg.P))) rg.mainBg = it;
@@ -395,13 +506,15 @@ function analyseMaster(doc, mi, focalAt, roles, follow) {
         rg.focal = pickFocal(rg.items, rmr);
         if (fo && fo[0] >= rmr[0] && fo[0] <= rmr[2]) rg.focal = { p: fo, main: rg.focal.main, r: Math.max(0, focalAt[2] || 0), set: true };   // focal clicked in the tool
         // hero's real visual extent (text on a path reports its whole path, not the letters)
-        var V = null, vb;
+        var V = null, vb, sh, parts = [];
         for (k = 0; k < rg.items.length; k++) {
             if (rg.items[k].kind !== "hero") continue;
-            vb = visualBounds(rg.items[k].item);
+            sh = visualShape(rg.items[k].item); vb = sh.b;
             if (vb[2] - vb[0] <= 0 && vb[1] - vb[3] <= 0) continue;
             V = V ? [Math.min(V[0], vb[0]), Math.max(V[1], vb[1]), Math.max(V[2], vb[2]), Math.min(V[3], vb[3])] : vb;
+            parts = parts.concat(sh.parts);
         }
+        rg.Vparts = parts;
         rg.V = V || [rg.focal.p[0] - 1, rg.focal.p[1] + 1, rg.focal.p[0] + 1, rg.focal.p[1] - 1];
         if (rg.mainBg && (!mainRegion || area(rg.mainBg.P) > area(mainRegion.mainBg.P))) mainRegion = rg;   // the photo zone
     }
@@ -419,7 +532,7 @@ function analyseMaster(doc, mi, focalAt, roles, follow) {
         }
         return out;
     }
-    function layoutFor(rg, rtr) { return layoutMarkerFirst(rg.mainBg ? rg.mainBg.P : rg.mr, rg.V, rg.focal.p, edgesOn(rg, rtr), rg.mr, rtr, follow !== false, rg.focal.r); }
+    function layoutFor(rg, rtr) { return layoutMarkerFirst(rg.mainBg ? rg.mainBg.P : rg.mr, rg.V, rg.focal.p, edgesOn(rg, rtr), rg.mr, rtr, follow !== false, rg.focal.r, rg.Vparts); }
     function needsPhoto(w, h) {
         var tr0 = [0, h, w, 0], rs = targetRects(regions, tr0, split), q = 0;
         while (q < regions.length && regions[q] !== mainRegion) q++;
@@ -444,7 +557,7 @@ function makeAdapts(M, sizes) {
     var layoutFor = M.layoutFor, j, k, it;
     var log = ["Adapt Maker log  " + new Date(), "master " + doc.artboards[mi].name + " rect " + r(mr) + (split ? "  SPLIT" : "")];
     for (j = 0; j < regions.length; j++) {
-        log.push("region " + j + " rect " + r(regions[j].mr) + " focal " + r(regions[j].focal.p) + " hero visual " + r(regions[j].V) +
+        log.push("region " + j + " rect " + r(regions[j].mr) + " focal " + r(regions[j].focal.p) + " hero visual " + r(regions[j].V) + " (" + regions[j].Vparts.length + " parts)" +
                  " photo " + (regions[j].mainBg ? r(regions[j].mainBg.P) : "none"));
         for (k = 0; k < regions[j].items.length; k++) {
             it = regions[j].items[k];
@@ -467,9 +580,14 @@ function makeAdapts(M, sizes) {
         mr = MM.mr; regions = MM.regions; items = MM.items; mainRegion = MM.mainRegion; split = MM.split; layoutFor = MM.layoutFor;
         if (!usedMasters[MM.mi]) {
             usedMasters[MM.mi] = true;
+            for (j = 0; j < regions.length; j++) {
+                var vr = regions[j].V, zr = regions[j].mr;
+                if (vr[2] - vr[0] > 1.02 * (zr[2] - zr[0]) || vr[1] - vr[3] > 1.02 * (zr[1] - zr[3]))
+                    warnings.push(doc.artboards[MM.mi].name + ": the headline measures bigger than its board, so every size shrinks it. A frame, path or hidden box around it may be counted. Check it in Roles.");
+            }
             if (MM !== M) {
                 log.push("master " + doc.artboards[MM.mi].name + " rect " + r(mr) + (split ? "  SPLIT" : ""));
-                for (j = 0; j < regions.length; j++) log.push("region " + j + " rect " + r(regions[j].mr) + " focal " + r(regions[j].focal.p) + " hero visual " + r(regions[j].V));
+                for (j = 0; j < regions.length; j++) log.push("region " + j + " rect " + r(regions[j].mr) + " focal " + r(regions[j].focal.p) + " hero visual " + r(regions[j].V) + " (" + regions[j].Vparts.length + " parts)");
             }
         }
         log.push(sz.label + " <- master " + doc.artboards[MM.mi].name);
@@ -543,13 +661,25 @@ function makeAdapts(M, sizes) {
                 continue;
             }
             var Lt = layoutFor(rg2, rtr);
+            var why = heroReason(Lt);
             log.push(ab.name + (split ? " zone " + j : "") + ": " + orientationOf(sz.w, sz.h) + ", hero scale " + Lt.sh.toFixed(3) +
+                     (why ? " (would be " + Lt.want.toFixed(3) + "; shrank " + why + ")" : "") +
                      (plate ? ", attached photo " + plate.fsName : ", photo scale " + Lt.s.toFixed(3)));
+            if (why && Lt.sh < HERO_SHRINK_NOTE * Lt.want)
+                warnings.push(sz.label + (split ? " zone " + j : "") + ": headline is " + Math.round(100 - 100 * Lt.sh / Lt.want) + "% smaller than it would be, " + why + ".");
             if (plate) warnings.push(sz.label + ": your photo is centred. Nudge it so the face sits where you want it.");
             else if (rg2 === mainRegion) {
                 if (Lt.zoom > ZOOM_LIMIT) warnings.push(sz.label + ": photo enlarged " + Lt.zoom.toFixed(1) + "x to fill the frame and may look soft. A taller or wider photo will fix it.");
                 if (Lt.cut) warnings.push(sz.label + ": the circle around the anchor is too big for this size, so part of it is cropped. Make the circle smaller.");
                 if (Lt.drift > 20) warnings.push(sz.label + ": the photo has no room to move, so the anchor sits " + Math.round(Lt.drift) + " pt from where you put it. A larger photo would fix this.");
+            }
+            for (var ci = 0; !plate && ci < rg2.items.length; ci++) {
+                if (!rg2.items[ci].cutout) continue;
+                var cv = cutoutCover(rg2.items[ci].shown, rg2.V, rg2.Vparts, Lt);
+                if (cv.now - cv.was <= CUT_COVER_NOTE) continue;
+                log.push(ab.name + ": " + who(rg2.items[ci]) + " covers " + Math.round(100 * cv.now) + "% of the headline letters (master " + Math.round(100 * cv.was) + "%)");
+                warnings.push(sz.label + (split ? " zone " + j : "") + ": the cut-out covers more of the headline than in the master. Check by eye.");
+                break;
             }
             if (Lt.clash) warnings.push(sz.label + (split ? " zone " + j : "") + ": headline touches the logo or legal text.");
 
@@ -570,7 +700,12 @@ function makeAdapts(M, sizes) {
                         if (src.cutout) moveTo(dup, pl.s, pl.left, pl.top, true);
                         else makePhoto(dup, pl, rtr, sz.label + (split ? " zone " + j : ""));
                     } else if (src.kind === "decor") {   // bubbles, dividers: ride with the photo, never part of the headline block
-                        moveTo(dup, Lt.s, Lt.ox + Lt.s * src.b[0], Lt.oy + Lt.s * src.b[1], false);
+                        if (src.b[2] - src.b[0] >= SCRIM_SPAN * (rg2.mr[2] - rg2.mr[0]) && !holds(src.item, isTextItem, 0)) {   // a scrim: stretch it to the board, see placeBand
+                            var bt = placeBand(src.b, rg2.mr, rtr, Lt.s, Lt.ox, Lt.oy), bw = src.b[2] - src.b[0], bh = src.b[1] - src.b[3];
+                            if (bw > 0 && bh > 0) dup.resize(100 * (bt[2] - bt[0]) / bw, 100 * (bt[1] - bt[3]) / bh, true, true, true, true, 100, Transformation.TOPLEFT);
+                            var bn = dup.visibleBounds;
+                            dup.translate(bt[0] - bn[0], bt[1] - bn[1]);
+                        } else moveTo(dup, Lt.s, Lt.ox + Lt.s * src.b[0], Lt.oy + Lt.s * src.b[1], false);
                     } else if (src.kind === "hero") {
                         moveTo(dup, Lt.sh, Lt.hx + Lt.sh * src.b[0], Lt.hy + Lt.sh * src.b[1], false);
                     } else {
@@ -628,7 +763,7 @@ function exportPng(doc, mi, path, W) {
 
 // With job.runs set (the app's temporary folder, emptied when it quits) every Make leaves a folder there: the job sent,
 // the result and log, and a PNG of the master and of each new adapt, so runs can be compared. Reads the document only.
-function recordRun(doc, mi, from, job, res) {
+function recordRun(doc, mi, from, job, res, Ms) {
     var d = new Date(), i, rect;
     function p(n) { return (n < 10 ? "0" : "") + n; }
     var runs = new Folder(job.runs);
@@ -637,6 +772,8 @@ function recordRun(doc, mi, from, job, res) {
     dir.create();
     writeText(dir.fsName + "/job.json", toJSON(job));
     writeText(dir.fsName + "/result.json", toJSON(res));
+    var st = []; for (i = 0; Ms && i < Ms.length; i++) { try { st.push(structureOf(Ms[i])); } catch (e) {} }
+    writeText(dir.fsName + "/structure.json", toJSON({ doc: doc.name, masters: st }));
     if (res.log) new File(res.log).copy(dir.fsName + "/log.txt");
     rect = doc.artboards[mi].artboardRect;
     exportPng(doc, mi, dir.fsName + "/00 master.png", rect[2] - rect[0]);
@@ -645,6 +782,37 @@ function recordRun(doc, mi, from, job, res) {
         exportPng(doc, i, dir.fsName + "/" + p(i - from + 1) + " " + doc.artboards[i].name.replace(/[\/:*?"<>|]/g, "-") + ".png", rect[2] - rect[0]);
     }
     return dir.fsName;
+}
+
+// The master's structure as plain data: each object's type, bounds, masks and (for path text) letter boxes, with the
+// role it got. Saved with every Make so a KV that goes wrong can be replayed in grunter/tests without Illustrator.
+function structureOf(M) {
+    function rb(b) { var o = [], i; for (i = 0; i < 4; i++) o.push(Math.round(b[i] * 10) / 10); return o; }
+    function node(it, depth) {
+        var n = { t: it.typename, b: rb(it.visibleBounds) }, i, sh;
+        try { if (it.name) n.name = String(it.name).substr(0, 60); } catch (e) {}
+        try { if (it.typename === "GroupItem" && it.clipped) n.clipped = true; } catch (e) {}
+        if (isClipPath(it)) n.clip = true;
+        if (it.typename === "TextFrame") {
+            // if/else, not a chained ?: : ExtendScript gets "a === X ? .. : a === Y ? .." wrong with enums
+            try { if (it.kind === TextType.PATHTEXT) n.text = "path"; else if (it.kind === TextType.AREATEXT) n.text = "area"; else n.text = "point"; } catch (e) {}
+            if (n.text === "path") { sh = visualShape(it); n.letters = []; for (i = 0; i < sh.parts.length; i++) n.letters.push(rb(sh.parts[i])); }
+        }
+        if (it.typename === "GroupItem" && depth < 6) {
+            n.kids = [];
+            for (i = 0; i < it.pageItems.length && i < 300; i++) n.kids.push(node(it.pageItems[i], depth + 1));
+        }
+        return n;
+    }
+    var out = { name: M.doc.artboards[M.mi].name, rect: rb(M.mr), items: [] }, i, j, it, role;
+    for (i = 0; i < M.raw.length; i++) {
+        it = node(M.raw[i].item, 0);
+        role = "";
+        for (j = 0; j < M.items.length; j++) if (M.items[j].item === M.raw[i].item) role = M.items[j].kind + (M.items[j].cutout ? " cutout" : "");
+        it.role = role; if (M.raw[i].tag) it.tag = M.raw[i].tag;
+        out.items.push(it);
+    }
+    return out;
 }
 
 // What the tool shows: the master's objects (pt from the artboard's top-left), roles, zones, focal, photo checks.
@@ -726,10 +894,14 @@ function runJob(job) {
             var before = doc.artboards.length, active = doc.artboards.getActiveArtboardIndex();
             try {
                 res = makeAdapts(M, sizes);
-                if (job.runs) try { res.record = recordRun(doc, mi, before, job, res); } catch (e) { res.record = null; }   // a failed record never fails the Make
+                if (job.runs) try { res.record = recordRun(doc, mi, before, job, res, Ms); } catch (e) { res.record = null; }   // a failed record never fails the Make
             } finally {
                 try { doc.artboards.setActiveArtboardIndex(active); } catch (e2) {}   // the next read must not pick up a new adapt as the master
             }
+        } else if (job.mode === "structure") {
+            var all = [structureOf(M)];
+            for (i = 0; job.masters && i < job.masters.length; i++) if (job.masters[i].artboard !== mi) all.push(structureOf(analyseMaster(doc, job.masters[i].artboard, null, null, true)));
+            res = { doc: doc.name, masters: all };
         } else {
             res = describe(M, job.checks);
             if (job.png) exportPng(doc, mi, job.png.replace("{i}", String(mi)), M.W);   // {i}: one preview file per master

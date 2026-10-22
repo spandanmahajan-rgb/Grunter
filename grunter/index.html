@@ -141,8 +141,6 @@
   .anchor::before { width: 12px; height: 1px; margin: -.5px 0 0 -6px; }
   .anchor::after { width: 1px; height: 12px; margin: -6px 0 0 -.5px; }
   .anchor-area { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; border: 1.5px dashed #fff; background: #ffffff1a; pointer-events: none; z-index: 4; }
-  .field-range { display: grid; gap: 4px; margin: 10px 0; font-size: var(--text-meta); }
-  .field-range small { color: var(--color-text-muted, inherit); opacity: .7; }
   .anchor:hover { transform: scale(1.08); }
   .anchor:focus-visible { outline: 1.5px solid #fff; outline-offset: 4px; }
   .anchor.is-dragging { cursor: grabbing; transform: scale(1.15); transition: none; }
@@ -192,41 +190,48 @@
   .step { padding: var(--space-section); border-bottom: 1px solid var(--color-border); }
   .step:last-child { border-bottom: 0; }
   .step-head { margin: 0; font: inherit; }
-  .step-toggle { display: grid; grid-template-columns: var(--space-indent) 1fr 16px; align-items: baseline; width: 100%; background: none; border: 0; padding: 0; text-align: left; margin-bottom: 6px; }
+  /* Three tiers: the head carries the step's answer, labels and values in full colour, help in the quietest tone */
+  .step-toggle { display: grid; grid-template-columns: var(--space-indent) 1fr auto 16px; align-items: center; width: 100%; background: none; border: 0; padding: 0; text-align: left; margin-bottom: 12px; }
   .step.is-collapsed .step-toggle { margin-bottom: 0; }
-  .step-num { font-weight: var(--weight-label); color: var(--color-text-subtle); font-variant-numeric: tabular-nums; }
-  .step.is-done .step-num { color: var(--color-text); }
+  .step-num { width: 18px; height: 18px; display: grid; place-items: center; border: 1px solid var(--color-text-subtle); color: var(--color-text-subtle); font-weight: var(--weight-title); font-variant-numeric: tabular-nums; line-height: 1; }
+  .step.is-done .step-num { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-on-ink); }
   .step-title { font-size: var(--text-title); font-weight: var(--weight-title); letter-spacing: -.01em; }
+  .step-sum { color: var(--color-text-muted); font-variant-numeric: tabular-nums; margin-right: 10px; }
   .chev { width: 16px; height: 16px; align-self: center; color: var(--color-text-subtle); transition: transform .2s var(--motion-ease), color .15s; }
   .step-toggle:hover .chev { color: var(--color-text); }
   .step.is-collapsed .chev { transform: rotate(-90deg); }
   .step.is-collapsed .step-body { display: none; }
-  .step-warn { margin: -8px 0 16px var(--space-indent); max-width: 48ch; font-size: var(--text-meta); }
+  .step-warn { margin: -4px 0 16px var(--space-indent); max-width: 48ch; font-size: var(--text-meta); color: var(--color-warning); }
   .step-warn[hidden] { display: none; }
-  .step-text { color: var(--color-text-muted); margin: 0 0 16px var(--space-indent); max-width: 48ch; }
+  .step-text { color: var(--color-text-subtle); margin: 0 0 16px var(--space-indent); max-width: 48ch; }
+  .step.is-done .step-text { display: none; }   /* the intro is for the first pass; once the step is done the head says it */
   .step-actions { margin: 14px 0 0 var(--space-indent); display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
   .step-note { margin: 14px 0 0 var(--space-indent); color: var(--color-text-subtle); font-size: var(--text-meta); }
+  .field-label { display: flex; justify-content: space-between; margin: 0 0 8px; font-weight: var(--weight-label); }
+  .field-label output { color: var(--color-text-muted); font-weight: var(--weight-body); font-variant-numeric: tabular-nums; }
 
-  /* Switch: a square track, no pill */
-  .switch { position: relative; display: flex; align-items: flex-start; gap: 12px; margin: 0 0 0 var(--space-indent); cursor: pointer; }
-  .switch input { position: absolute; opacity: 0; width: 28px; height: 16px; margin: 0; cursor: pointer; }
-  .switch .track { flex: none; width: 28px; height: 16px; border: 1px solid var(--color-text-subtle); position: relative; transition: background .15s, border-color .15s; margin-top: 2px; }
-  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: var(--color-text-subtle); transition: transform .15s var(--motion-ease), background .15s; }
-  .switch input:checked + .track { background: var(--color-ink); border-color: var(--color-ink); }
-  .switch input:checked + .track::after { transform: translateX(12px); background: var(--color-on-ink); }
-  .switch input:focus-visible + .track { outline: 1.5px solid var(--color-text); outline-offset: 3px; }
-  .switch b { display: block; font-weight: var(--weight-label); }
-  .switch small { display: block; color: var(--color-text-subtle); font-size: var(--text-meta); margin-top: 2px; }
+  /* Headline: two pictures, so the choice shows instead of being described */
+  .follow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 22px var(--space-indent); }
+  .follow-opt { display: grid; gap: 8px; text-align: left; background: none; border: 0; padding: 0; color: var(--color-text-subtle); font-weight: var(--weight-label); transition: color .15s; }
+  .follow-opt svg { display: block; width: 100%; height: auto; border: 1px solid var(--color-border-strong); transition: border-color .15s; }
+  .follow-opt:hover, .follow-opt[aria-pressed="true"] { color: var(--color-text); }
+  .follow-opt[aria-pressed="true"] svg { border-color: var(--color-ink); }
+  .field-range { display: block; margin: 0 0 0 var(--space-indent); }
+  .field-range input { width: 100%; margin: 0; accent-color: var(--color-text); }
+  .range-ends { display: flex; justify-content: space-between; color: var(--color-text-subtle); margin-top: 2px; }
 
   /* Roles: a typographic summary, a plain guide, and rows */
   .chips { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-left: var(--space-indent); }
   .chip { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 2px 0; color: var(--color-text-muted); font-variant-numeric: tabular-nums; text-decoration: underline 1px transparent; text-underline-offset: 4px; transition: color .12s, text-decoration-color .12s; }
   .chip:hover, .chip:focus-visible { color: var(--color-text); text-decoration-color: currentColor; }
   .chip i, .role-dot { width: 8px; height: 8px; display: inline-block; flex: none; }
-  .role-guide { margin: 16px 0 0 var(--space-indent); display: grid; gap: 6px; }
-  .role-guide div { display: grid; grid-template-columns: 8px 72px minmax(0, 1fr); gap: 10px; align-items: baseline; color: var(--color-text-muted); padding: 2px 0; }
-  .role-guide div:hover { color: var(--color-text); }
+  .role-guide { margin: 18px 0 0 var(--space-indent); padding-top: 14px; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+  .role-guide div { display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 0 8px; align-items: baseline; color: var(--color-text-subtle); }
+  .role-guide div:hover { color: var(--color-text-muted); }
   .role-guide b { color: var(--color-text); font-weight: var(--weight-label); }
+  .role-guide span:last-child { grid-column: 2; }
+  .elements .element.is-extra { display: none; }
+  .elements.is-all .element.is-extra { display: grid; }
   .elements { margin: 16px 0 0 var(--space-indent); display: grid; }
   .element { display: grid; grid-template-columns: 16px 48px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 8px; margin: 0 -8px; transition: background .12s; }
   .element:hover { background: var(--color-bg-hover); }
@@ -253,20 +258,29 @@
   .group-photo span { overflow-wrap: anywhere; }
   .group-photo .button-link { font-size: var(--text-meta); }
   .cards { display: grid; }
-  .card { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; padding: 6px 8px; margin: 0 -8px; cursor: pointer; transition: background .12s; font-variant-numeric: tabular-nums; }
+  /* Sizes say it once: one column header, quiet defaults, full colour only for a changed source or a real problem */
+  #groups { --src: 0px; }
+  #groups.is-multi { --src: 56px; }
+  .card, .size-cols { display: grid; grid-template-columns: 24px 40px minmax(0, 1fr) 72px var(--src) 22px; align-items: center; gap: 0 8px; font-variant-numeric: tabular-nums; }
+  .card { padding: 5px 8px; margin: 0 -8px; cursor: pointer; transition: background .12s; }
+  .size-cols { color: var(--color-text-subtle); margin: 0 0 -12px var(--space-indent); }
+  .size-alert { display: flex; gap: 10px; align-items: baseline; color: var(--color-warning); font-weight: var(--weight-label); margin: 0 0 16px var(--space-indent); }
+  .size-alert i { width: 8px; height: 8px; flex: none; background: currentColor; }
+  .size-alert .button-link { margin-left: auto; }
+  .group-head h4 small { color: var(--color-text-subtle); font-weight: var(--weight-body); margin-left: 6px; }
   .card:hover { background: var(--color-bg-hover); }
   .card .shape { width: 24px; height: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
   .card .shape i { display: block; border: 1px solid var(--color-text-subtle); transition: background .15s, border-color .15s; }
   .card[aria-checked="true"] .shape i { background: var(--color-ink); border-color: var(--color-ink); }
-  .card b { flex: none; min-width: 34px; font-weight: var(--weight-title); color: var(--color-text); }
-  .card small { flex: none; color: var(--color-text-muted); }
+  .card b { font-weight: var(--weight-title); color: var(--color-text); }
+  .card small { color: var(--color-text-muted); }
   .card[aria-checked="false"] b, .card[aria-checked="false"] small, .card[aria-checked="false"] .card-status { color: var(--color-text-subtle); }
-  .card-status { flex: 1 1 auto; min-width: 0; color: var(--color-text-subtle); }
+  .card-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-subtle); }
   .card-status.needs { color: var(--color-warning); font-weight: var(--weight-label); } .card-status.own { color: var(--color-text); font-weight: var(--weight-label); }
-  .card-source { flex: none; padding: 2px 0; border: 0; background: none; color: var(--color-text-muted); font-weight: var(--weight-label); text-decoration: underline 1px transparent; text-underline-offset: 3px; }
+  .card-source { justify-self: start; padding: 2px 0; border: 0; background: none; color: var(--color-text-subtle); text-decoration: underline 1px transparent; text-underline-offset: 3px; }
   .card-source:hover { color: var(--color-text); text-decoration-color: currentColor; }
-  .card-source.is-set { color: var(--color-text); text-decoration-color: currentColor; }
-  .card-action { flex: none; width: 22px; height: 22px; border: 0; background: none; color: var(--color-text-subtle); display: flex; align-items: center; justify-content: center; padding: 0; opacity: 0; transition: opacity .12s, color .12s; }
+  .card-source.is-set { color: var(--color-text); font-weight: var(--weight-label); text-decoration-color: currentColor; }
+  .card-action { width: 22px; height: 22px; border: 0; background: none; color: var(--color-text-subtle); display: flex; align-items: center; justify-content: center; padding: 0; opacity: 0; transition: opacity .12s, color .12s; }
   .card:hover .card-action, .card:focus-within .card-action { opacity: 1; }
   .card-action:hover { color: var(--color-text); }
   .card-action svg { width: 14px; height: 14px; }
@@ -281,7 +295,8 @@
   /* Footer + results */
   .sidebar-foot { padding: 16px var(--space-section) 18px; border-top: 1px solid var(--color-border); }
   .sidebar-foot .button-primary { width: 100%; }
-  .sidebar-foot p { margin: 10px 0 0; color: var(--color-text-subtle); font-size: var(--text-meta); }
+  .sidebar-foot p { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; color: var(--color-text-subtle); font-size: var(--text-meta); }
+  .sidebar-foot p svg { width: 14px; height: 14px; flex: none; }
   /* Notes: a popover under the top bar. It opens by itself after Make, then folds into the bell. */
   .topbar { position: relative; }
   .badge { margin-left: 4px; font-weight: var(--weight-title); color: var(--color-warning); }
@@ -339,19 +354,22 @@
     <h2 class="sidebar-title">Ratio settings</h2>
     <div class="sidebar-scroll" id="sidebarScroll">
       <section class="step" id="step1">
-        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body1"><span class="step-num">1</span><span class="step-title">Place the anchor</span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
+        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body1"><span class="step-num">1</span><span class="step-title">Anchor</span><span class="step-sum" id="sum1"></span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
         <div class="step-body" id="body1">
-        <p class="step-text">Drag the anchor onto the part of the photo you want to keep in every size, like a face or a product.</p>
+        <p class="step-text">Drag the anchor onto what must stay in every size, like a face or a product.</p>
         <p class="step-warn" id="anchorWarn" role="status" hidden></p>
-        <label class="switch"><input type="checkbox" id="followSw" checked><span class="track" aria-hidden="true"></span>
-          <span><b>Move the headline with the anchor</b><small id="followNote"></small></span></label>
-        <label class="field-range"><b>Area to keep in view <output id="anchorRVal"></output></b><input type="range" id="anchorR" min="0" max="40" step="1" value="0" aria-valuetext="Just the point"><small id="anchorRNote"></small></label>
+        <p class="field-label" id="followLbl" style="margin-left:var(--space-indent)">Headline</p>
+        <div class="follow" role="group" aria-labelledby="followLbl">
+          <button class="follow-opt" data-follow="1" aria-pressed="true"><svg viewBox="0 0 120 44" fill="none" aria-hidden="true"><rect width="120" height="44" fill="var(--color-bg-hover)"/><circle cx="74" cy="26" r="9" stroke="currentColor" stroke-dasharray="2 2"/><path d="M74 26L44 14" stroke="var(--color-role-headline)" stroke-dasharray="2 3"/><rect x="18" y="10" width="30" height="7" fill="var(--color-role-headline)"/></svg>Follows the anchor</button>
+          <button class="follow-opt" data-follow="0" aria-pressed="false"><svg viewBox="0 0 120 44" fill="none" aria-hidden="true"><rect width="120" height="44" fill="var(--color-bg-hover)"/><circle cx="74" cy="26" r="9" stroke="currentColor" stroke-dasharray="2 2"/><rect x="10" y="7" width="30" height="7" fill="var(--color-role-headline)"/><path d="M8 5h4M8 5v4" stroke="currentColor"/></svg>Stays in place</button>
+        </div>
+        <label class="field-range"><span class="field-label">Area to keep <output id="anchorRVal"></output></span><input type="range" id="anchorR" min="0" max="40" step="1" value="0" aria-valuetext="Just the point"><span class="range-ends" aria-hidden="true"><span>Just the point</span><span>Wide</span></span></label>
         <div class="step-actions"><button class="button-link" id="resetAnchor">Reset anchor</button></div>
         </div>
       </section>
 
       <section class="step" id="step2">
-        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body2"><span class="step-num">2</span><span class="step-title">Check the roles</span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
+        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body2"><span class="step-num">2</span><span class="step-title">Roles</span><span class="step-sum" id="sum2"></span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
         <div class="step-body" id="body2">
         <p class="step-text">Roles decide how each element moves. Grunter filled them in.</p>
         <div class="chips" id="chips"></div>
@@ -360,15 +378,16 @@
           <div class="role-guide" id="roleGuide"></div>
           <div class="pickbar" id="pickbar" hidden><span id="pickCount"></span><label class="sr-only" for="pickRole">Role for the ticked elements</label><select class="role-select is-set" id="pickRole"></select><button class="button-link" id="pickClear">Clear</button></div>
           <div class="elements" id="elements"></div>
+          <div class="step-actions"><button class="button-link" id="showAll" hidden></button></div>
           <p class="step-note" id="learnNote"></p>
         </div>
         </div>
       </section>
 
       <section class="step" id="step3">
-        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body3"><span class="step-num">3</span><span class="step-title">Choose the sizes</span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
+        <h3 class="step-head"><button class="step-toggle" aria-expanded="true" aria-controls="body3"><span class="step-num">3</span><span class="step-title">Sizes</span><span class="step-sum" id="sum3"></span><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg></button></h3>
         <div class="step-body" id="body3">
-        <p class="step-text">Select the sizes to make. Each uses the closest master.</p>
+        <p class="step-text">Tick the sizes to make.</p>
         <div id="groups"></div>
         <div class="add-size">
           <label class="sr-only" for="addSize">Add a size</label>
@@ -382,7 +401,7 @@
 
     <div class="sidebar-foot">
       <button class="button-primary" id="makeBtn" disabled>Make adapts</button>
-      <p>Save your file first. File › Revert undoes a Make, along with any other unsaved edits.</p>
+      <p><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 2.5h8l2 2v9H3zM5.5 2.5v3h4v-3M5.5 13.5v-4h5v4"/></svg>Save first. File › Revert undoes a Make.</p>
     </div>
   </aside>
 </div>
@@ -390,13 +409,13 @@
 <script>
 // ---------- vocabulary (one place, so copy stays consistent) ----------
 const ROLE_INFO = {   // role -> [name, how it moves]
-  photo:    ["Photo",    "Cropped so the anchor stays in view."],
-  cutout:   ["Cut-out",  "Layered in front. Moves with the photo."],
-  headline: ["Headline", "Moves and scales as one block."],
-  panel:    ["Panel",    "Kept whole, fitted to its side."],
-  logo:     ["Logo",     "Stays in its corner. Scales."],
-  legal:    ["Legal",    "Stays in its corner. Never resized."],
-  decor:    ["Decor",    "Moves with the photo. Never blocks the headline."],
+  photo:    ["Photo",    "Crops to the anchor"],
+  cutout:   ["Cut-out",  "Rides on the photo"],
+  headline: ["Headline", "Moves as one block"],
+  panel:    ["Panel",    "Kept whole, fits its side"],
+  logo:     ["Logo",     "Pinned to corner, scales"],
+  legal:    ["Legal",    "Pinned to corner, fixed size"],
+  decor:    ["Decor",    "Follows photo, clears headline"],
 };
 const ROLE_ORDER = ["photo", "cutout", "headline", "panel", "logo", "legal", "decor"];
 const KIND_NAME = { edge: "Logo/legal", focal: "Anchor shape" };
@@ -406,6 +425,7 @@ const DEFAULT_ROWS = [
   ["1:1", 1080, 1080, true],
   ["9:16", 1080, 1920, true], ["4:5", 1080, 1350, true], ["1:2", 960, 1920, false], ["2:3", 1080, 1620, false],
 ];
+const ROLES_SHOWN = 3;    // element rows shown before "Show all"
 const MEMORY_MAX = 500;   // learned corrections kept; the oldest go first
 const LEARN_MAX = 0.35;   // how close an element must be to a past correction before Grunter reuses it
 const ICON_PHOTO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2.5 11l3.5-3.5 3 3 2-2 2.5 2.5"/><circle cx="10.5" cy="6" r="1"/></svg>';
@@ -466,8 +486,7 @@ const fromKeys = (byKey) => { const out = {}; (A.items || []).forEach((it) => { 
 const docKey = () => (A ? A.doc.path || A.doc.name : "");
 const masterKey = () => "master:" + docKey() + "#" + (A ? A.master.index : "");
 const target = () => (A ? { doc: docKey(), artboard: A.master.index } : {});
-const showR = (pct) => { $("anchorRNote").textContent = circleNote(pct); $("anchorRVal").textContent = pct ? pct + "%" : "off"; $("anchorR").setAttribute("aria-valuetext", pct ? `${pct}% of the short side` : "Just the point"); };
-const circleNote = (pct) => (pct ? "Everything inside the circle stays in view, as long as the photo is big enough." : "Only the point is kept. Raise this to keep more of the photo around it.");
+const showR = (pct) => { $("anchorRVal").textContent = pct ? pct + "%" : "off"; $("anchorR").setAttribute("aria-valuetext", pct ? `${pct}% of the short side` : "Just the point"); };
 const anchorArg = (a) => (a ? (a.r ? [a.x, a.y, a.r] : [a.x, a.y]) : null);   // r: radius in master pt
 const saveState = () => kvSet("state", state);
 const saveMaster = () => kvSet(masterKey(), { anchor, roles: toKeys(roles), learned: toKeys(learned), follow });
@@ -616,11 +635,10 @@ const brandName = () => KV["brand:" + docKey()] ?? (A.items.find((it) => it.kind
 function render() {
   $("sidebar").classList.remove("is-idle");
   $("step1").classList.toggle("is-done", masters.every((m) => m.anchor));
-  $("followSw").checked = follow;
+  document.querySelectorAll("[data-follow]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.follow === (follow ? "1" : "0"))));
   const pct = anchor?.r ? Math.round((anchor.r / Math.min(A.master.w, A.master.h)) * 100) : 0;
   $("anchorR").value = pct; showR(pct);
-  $("followNote").textContent = follow ? "The headline keeps its distance from the anchor, as in your master."
-                                       : "The headline stays where it is on the board. The anchor only moves the photo.";
+  $("sum1").textContent = anchor ? (pct ? `Placed · ${pct}%` : "Placed") : "Not placed";
   const zone = anchor && A.split && A.regions.find((r) => anchor.x >= r.box.x && anchor.x <= r.box.x + r.box.w);
   $("anchorWarn").hidden = !(zone && !zone.photo);   // a split KV: the anchor only steers the photo side
   $("anchorWarn").textContent = "This anchor is on the panel side. It sets the panel crop. The photo side crops on its own.";
@@ -721,6 +739,7 @@ const highlightRole = (role, on) => document.querySelectorAll(role === "logo" ||
 function renderRoles() {
   const count = {};
   A.items.forEach((it) => { const r = roleOf(it); count[r] = (count[r] || 0) + 1; });
+  $("sum2").textContent = `${A.items.length} element${A.items.length === 1 ? "" : "s"}`;
   $("chips").innerHTML = Object.entries(count).map(([r, n]) => `<button class="chip" data-role="${r}" aria-label="${n} ${roleName(r)}. Show on the master."><i style="background:${roleColor(r)}"></i>${n} ${roleName(r)}</button>`).join("");
   const mine = Object.keys(roles).filter((id) => !learned[id]).length;
   $("step2").classList.toggle("is-done", mine > 0);
@@ -732,14 +751,14 @@ function renderRoles() {
     el.addEventListener("mouseenter", on(true)); el.addEventListener("mouseleave", on(false));
     el.addEventListener("focus", on(true)); el.addEventListener("blur", on(false));
   });
-  $("elements").innerHTML = A.items.map((it) => {
+  $("elements").innerHTML = A.items.map((it, idx) => {
     const k = Math.min(T / Math.max(it.box.w, 1), TH / Math.max(it.box.h, 1));
     const thumb = `background-image:url(${previewUrl(A.master.index, previewAt)});background-size:${W * k}px ${H * k}px;background-position:${-it.box.x * k + (T - it.box.w * k) / 2}px ${-it.box.y * k + (TH - it.box.h * k) / 2}px`;
     const d = describe(it), g = guessOf(it), chosen = roles[it.id] || "auto";
     const who = roles[it.id] ? (learned[it.id] ? `<small class="learned">Learned</small>` : `<small class="by-you">Set by you</small>`) : it.tag ? `<small>Tagged in file</small>` : `<small>${d.sub}</small>`;
     const opts = [`<option value="auto" ${chosen === "auto" ? "selected" : ""}>${roleName(g)} (auto)</option>`]
       .concat(ROLE_ORDER.map((r) => `<option value="${r}" ${r === chosen ? "selected" : ""}>${ROLE_INFO[r][0]}</option>`)).join("");
-    return `<div class="element" data-id="${it.id}"><input type="checkbox" data-pick="${it.id}" ${picked.has(String(it.id)) ? "checked" : ""} aria-label="Select ${d.main}"><div class="thumb" style="${thumb}"></div>` +
+    return `<div class="element ${idx >= ROLES_SHOWN ? "is-extra" : ""}" data-id="${it.id}"><input type="checkbox" data-pick="${it.id}" ${picked.has(String(it.id)) ? "checked" : ""} aria-label="Select ${d.main}"><div class="thumb" style="${thumb}"></div>` +
       `<div class="label"><b>${d.main}</b>${who}</div>` +
       `<select class="role-select ${roles[it.id] ? "is-set" : ""}" data-id="${it.id}" style="--dot:${roleColor(roleOf(it))}" aria-label="Role of ${d.main}">${opts}</select></div>`;
   }).join("");
@@ -752,6 +771,9 @@ function renderRoles() {
     renderPickbar();
   }));
   renderPickbar();
+  const extra = A.items.length - ROLES_SHOWN;
+  $("showAll").hidden = extra <= 0;
+  $("showAll").textContent = $("elements").classList.contains("is-all") ? "Show fewer" : `Show all ${A.items.length}`;
   $("elements").querySelectorAll("select").forEach((sel) => {
     sel.addEventListener("focus", () => highlight(sel.dataset.id, true));
     sel.addEventListener("blur", () => highlight(sel.dataset.id, false));
@@ -794,6 +816,7 @@ $("pickRole").addEventListener("change", () => {
   setRoles([...picked], $("pickRole").value);
   picked.clear();
 });
+$("showAll").addEventListener("click", () => { $("elements").classList.toggle("is-all"); renderRoles(); });
 $("pickClear").addEventListener("click", () => { picked.clear(); renderRoles(); });
 $("toggleRoles").addEventListener("click", () => {
   const open = $("rolesPanel").hidden;
@@ -804,24 +827,27 @@ $("toggleRoles").addEventListener("click", () => {
 
 function shapeIcon(w, h) { const k = 18 / Math.max(w, h); return `<i style="width:${Math.max(6, w * k)}px;height:${Math.max(4, h * k)}px"></i>`; }
 function renderGroups() {
-  let html = "";
+  let html = "", needs = [];
+  const multi = masters.length > 1;
   for (const g of GROUPS) {
     const rows = state.rows.map((r, i) => ({ r, i })).filter(({ r }) => groupOf(r.w, r.h) === g.key);
     if (!rows.length) continue;
     const gp = state.groupPlate[g.key];
-    html += `<div class="group"><div class="group-head"><h4>${g.name}</h4><div class="group-photo">` +
+    html += `<div class="group"><div class="group-head"><h4>${g.name}<small>${rows.length}</small></h4><div class="group-photo">` +
       (gp ? `<span title="${esc(gp)}">${esc(base(gp))}</span><button class="button-link" data-gclear="${g.key}">Remove</button>`
-          : `<button class="button-link" data-gpick="${g.key}">Use another photo</button>`) + `</div></div><div class="cards">`;
+          : `<button class="button-link" data-gpick="${g.key}" title="Use another photo for every ${g.name.toLowerCase()} size">Add photo</button>`) + `</div></div><div class="cards">`;
     for (const { r, i } of rows) {
       const via = A && masters.length ? masterFor(r.w, r.h, r.master) : null;
       const picked = via && typeof r.master === "number" && via.A.master.index === r.master;
       const chk = via ? via.A.checks.find((c) => c.w === r.w && c.h === r.h) : null;
-      const plate = r.plate || gp;
+      const plate = r.plate || gp, bigger = g.key === "v" ? "taller" : "wider";
+      if (r.on && !plate && chk && chk.needsPhoto) needs.push({ r, i, bigger });
       const status = plate ? `<div class="card-status own" title="${esc(plate)}">${esc(base(plate))}</div>`
-        : chk && chk.needsPhoto ? `<div class="card-status needs" title="The photo is too small for this size. Add a ${g.key === "v" ? "taller" : "wider"} one.">Needs photo</div>`
-        : chk ? `<div class="card-status fits">Photo fits</div>` : `<div class="card-status fits"></div>`;
+        : chk && chk.needsPhoto ? `<div class="card-status needs" title="The photo is too small for this size. Add a ${bigger} one.">Too small</div>`
+        : chk ? `<div class="card-status fits">Fits</div>` : `<div class="card-status"></div>`;
       const custom = !DEFAULT_ROWS.some(([l, w, h]) => l === r.label && w === r.w && h === r.h);
-      const source = masters.length > 1 && via ? `<button class="card-source ${picked ? "is-set" : ""}" data-src="${i}" title="Built from the ${esc(masterLabel(via))}. Click to change.">from ${esc(shapeName(via.A.master.w, via.A.master.h))} ▾</button>` : "";
+      const from = via && shapeName(via.A.master.w, via.A.master.h), changed = picked || from !== g.name;   // say the source loudly only when it isn't the obvious one
+      const source = multi && via ? `<button class="card-source ${changed ? "is-set" : ""}" data-src="${i}" title="Built from the ${esc(masterLabel(via))}. Click to change.">${esc(from)}${changed ? " ▾" : ""}</button>` : "<span></span>";
       html += `<div class="card" role="checkbox" tabindex="0" aria-checked="${r.on}" data-on="${i}" aria-label="${esc(r.label)}, ${r.w} by ${r.h}">` +
         `<div class="shape">${shapeIcon(r.w, r.h)}</div><b>${esc(r.label)}</b><small>${r.w}×${r.h}</small>${status}${source}` +
         (r.plate ? `<button class="card-action" data-clear="${i}" title="Remove this size's photo" aria-label="Remove photo">${ICON_X}</button>`
@@ -830,10 +856,19 @@ function renderGroups() {
     }
     html += `</div></div>`;
   }
+  // Problems on ticked sizes roll up into one line, with the fix next to it. Unticked sizes stay quiet.
+  const alert = !needs.length ? ""
+    : needs.length === 1 ? `<p class="size-alert" role="status"><i></i>${esc(needs[0].r.label)} needs a ${needs[0].bigger} photo<button class="button-link" data-pick="${needs[0].i}">Add photo</button></p>`
+    : `<p class="size-alert" role="status"><i></i>${needs.map((n) => esc(n.r.label)).join(", ")} need a bigger photo</p>`;
+  html = alert + `<div class="size-cols" aria-hidden="true"><span></span><span>Ratio</span><span>Pixels</span><span>Photo</span><span>${multi ? "From" : ""}</span><span></span></div>` + html;
+  $("groups").classList.toggle("is-multi", multi);
   $("groups").innerHTML = html;
   const G = $("groups");
   G.querySelectorAll(".card").forEach((el) => {
-    const toggle = () => { const r = state.rows[el.dataset.on]; r.on = !r.on; el.setAttribute("aria-checked", String(r.on)); saveState(); updateMake(); };
+    const toggle = () => {   // redraw, so the photo alert follows the ticks; keep focus on the row
+      const r = state.rows[el.dataset.on]; r.on = !r.on; saveState(); renderGroups(); updateMake();
+      if (el.contains(document.activeElement) || document.activeElement === document.body) $("groups").querySelector(`[data-on="${el.dataset.on}"]`)?.focus();
+    };
     el.addEventListener("click", (e) => { if (!e.target.closest(".card-action, .card-source")) toggle(); });
     el.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && e.target === el) { e.preventDefault(); toggle(); } });
   });
@@ -888,6 +923,7 @@ function updateMake() {
   const n = state.rows.filter((r) => r.on).length;
   $("makeBtn").textContent = !A ? "Read a master first" : n ? `Make ${n} adapt${n > 1 ? "s" : ""}` : "Choose a size first";
   $("makeBtn").disabled = !A || !n;
+  $("sum3").textContent = `${n} of ${state.rows.length}`;
   $("step3").classList.toggle("is-done", n > 0 && !!A);
 }
 
@@ -1028,7 +1064,10 @@ $("anchorR").addEventListener("input", () => {   // % of the master's short side
 });
 let rNudge = 0;
 $("resetAnchor").addEventListener("click", () => { anchor = null; saveMaster(); analyse(); });
-$("followSw").addEventListener("change", () => { follow = $("followSw").checked; stash(); saveMaster(); analyse(); });
+document.querySelectorAll("[data-follow]").forEach((b) => b.addEventListener("click", () => {
+  if (follow === (b.dataset.follow === "1")) return;
+  follow = !follow; stash(); saveMaster(); analyse();
+}));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMenus(); showNote(false); } });
 document.querySelectorAll(".step-toggle").forEach((btn) => btn.addEventListener("click", () => {
   const step = btn.closest(".step"), closed = step.classList.toggle("is-collapsed");
@@ -1063,7 +1102,7 @@ $("makeBtn").addEventListener("click", async () => {
   if (lost) return notify(`<h3><i></i>Check the roles</h3><p>${lost} role${lost > 1 ? "s" : ""} no longer match${lost > 1 ? "" : "es"} an element, because it moved or was deleted. Check Roles, then Make again.</p>`, 1, "error");
   const sizes = state.rows.filter((r) => r.on).map((r) => ({
     w: r.w, h: r.h, plate: r.plate || state.groupPlate[groupOf(r.w, r.h)] || null,
-    master: masters.some((m) => m.A.master.index === r.master) ? r.master : undefined,
+    master: masterFor(r.w, r.h, r.master).A.master.index,   // always the one the panel shows, so the engine never breaks a tie (a square between 16:9 and 9:16) its own way
     label: (r.label.replace("×", "x") === `${r.w}x${r.h}` ? "" : r.label + " ") + `${r.w}x${r.h}`,
   }));
   const one = (m) => ({ artboard: m.A.master.index, focal: anchorArg(m.anchor), roles: m.roles, follow: m.follow !== false });
