@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 APP="build/Grunter.app"
-VERSION="0.1.3"
+VERSION="0.1.4"
 
 [ -f tests/run.js ] && node tests/run.js   # engine geometry checks (kept out of the public repo); stop here if they fail
 rm -rf "$APP"

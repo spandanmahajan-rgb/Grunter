@@ -125,8 +125,8 @@ function clashes(nv, edges, parts, V, sh, l, t) {
 function placeBand(b, mr, tr, s, ox, oy) {
     var H = mr[1] - mr[3], tol = 0.005 * H, r = [ox + s * b[0], oy + s * b[1], ox + s * b[2], oy + s * b[3]];
     r[0] = tr[0]; r[2] = tr[2];
-    if (b[3] - mr[3] <= tol) r[3] = Math.min(r[3], tr[3]);     // touched the master's bottom: still reaches the board's bottom
-    if (mr[1] - b[1] <= tol) r[1] = Math.max(r[1], tr[1]);     // ...or its top
+    if (b[3] - mr[3] <= tol) r[3] = tr[3];     // touched the master's bottom: ends exactly at the board's bottom (a crop must not push it past, or its dark end falls off the board)
+    if (mr[1] - b[1] <= tol) r[1] = tr[1];     // ...or its top
     return r;
 }
 
